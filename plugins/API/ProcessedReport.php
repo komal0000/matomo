@@ -267,9 +267,8 @@ class ProcessedReport
      *
      * @param mixed $apiMethodUniqueId
      * @return list<mixed>
-     * @ignore
      */
-    public static function getRenamedReportUniqueIdCandidates($apiMethodUniqueId)
+    private static function getRenamedReportUniqueIdCandidates($apiMethodUniqueId)
     {
         if (!is_string($apiMethodUniqueId)) {
             return [$apiMethodUniqueId];
@@ -288,9 +287,8 @@ class ProcessedReport
      * @param mixed $apiMethodUniqueId
      * @param list<string>|null $availableUniqueIds
      * @return mixed
-     * @ignore
      */
-    public static function getRenamedReportUniqueId($apiMethodUniqueId, ?array $availableUniqueIds = null)
+    private static function getRenamedReportUniqueId($apiMethodUniqueId, ?array $availableUniqueIds = null)
     {
         if (!is_string($apiMethodUniqueId) || !isset(self::RENAMED_REPORT_UNIQUE_IDS[$apiMethodUniqueId])) {
             return $apiMethodUniqueId;
