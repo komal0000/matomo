@@ -309,7 +309,8 @@ class ProcessedReport
 
     /**
      * For backward compatibility: resolves each report unique id of a requested selection,
-     * keeping the first occurrence of a report the resolution itself ends up naming twice. A selection that already named the same report twice keeps both entries.
+     * keeping the first occurrence of a report the resolution itself ends up naming twice.
+     * A selection that already named the same report twice keeps both entries.
      *
      * @param array<mixed> $apiMethodUniqueIds
      * @param list<string>|null $availableUniqueIds
