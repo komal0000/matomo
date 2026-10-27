@@ -31,6 +31,8 @@ export function shiftDateByPeriod(sourceDate: Date, period: string, direction: n
       shiftedDate.setDate(shiftedDate.getDate() + direction * 7);
       break;
     case 'month':
+      // start from the 1st so that e.g. Aug 31 + 1 month does not overflow into October
+      shiftedDate.setDate(1);
       shiftedDate.setMonth(shiftedDate.getMonth() + direction);
       break;
     case 'year':
