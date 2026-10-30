@@ -61,6 +61,34 @@ class FilteredTotalsTest extends IntegrationTestCase
         $this->assertSame(30, $dataTable->getTotalsRow()->getColumn('nb_visits'));
     }
 
+    public function testRecursiveTableSearchTotalsTheMatchingSubtableRowsInsteadOfTheirParentRows()
+    {
+        $dataTable = $this->makeDataTable();
+        // kept by the search for its matching subtable row, but only that row matches
+        $dataTable->getRowFromLabel('Germany')->setSubtable($this->makeSubtable([
+            ['label' => 'Rhineland', 'nb_visits' => 5, 'nb_actions' => 5, 'bounce_count' => 5, 'sum_visit_length' => 50],
+            ['label' => 'Bavaria', 'nb_visits' => 25, 'nb_actions' => 25, 'bounce_count' => 25, 'sum_visit_length' => 250],
+        ]));
+        // matches itself, its subtable rows are already part of its values
+        $dataTable->getRowFromLabel('Poland')->setSubtable($this->makeSubtable([
+            ['label' => 'Lower Poland', 'nb_visits' => 15, 'nb_actions' => 45, 'bounce_count' => 4, 'sum_visit_length' => 300],
+            ['label' => 'Pomerania', 'nb_visits' => 5, 'nb_actions' => 15, 'bounce_count' => 1, 'sum_visit_length' => 100],
+        ]));
+
+        $dataTable = $this->processReport([
+            'filter_column_recursive' => 'label',
+            'filter_pattern_recursive' => 'land',
+        ], $dataTable);
+
+        // the parent row stays visible with the values of its whole subtable
+        $this->assertSame(3, $dataTable->getRowsCount());
+        $this->assertSame(30, $dataTable->getRowFromLabel('Germany')->getColumn('nb_visits'));
+
+        // Finland (10) + Poland (20) + Rhineland (5), not the whole of Germany (30)
+        $this->assertTrue($dataTable->getMetadata(DataTable::TOTALS_ROW_IS_FILTERED_METADATA_NAME));
+        $this->assertSame(35, $dataTable->getTotalsRow()->getColumn('nb_visits'));
+    }
+
     public function testReportTotalsStayAvailableNextToTheFilteredTotals()
     {
         $dataTable = $this->processReport(['filter_pattern' => 'land']);
@@ -126,14 +154,14 @@ class FilteredTotalsTest extends IntegrationTestCase
         $this->assertFalse($dataTable->getMetadata(DataTable::TOTALS_ROW_IS_FILTERED_METADATA_NAME));
     }
 
-    private function processReport(array $requestOverrides = []): DataTable
+    private function processReport(array $requestOverrides = [], ?DataTable $dataTable = null): DataTable
     {
         $request = $this->makeRequest($requestOverrides);
 
         $processor = new DataTablePostProcessor(self::API_MODULE, self::API_METHOD, $request);
 
         /** @var DataTable $dataTable */
-        $dataTable = $processor->process($this->makeDataTable());
+        $dataTable = $processor->process($dataTable ?? $this->makeDataTable());
 
         return $dataTable;
     }
@@ -165,5 +193,13 @@ class FilteredTotalsTest extends IntegrationTestCase
         ]);
 
         return $dataTable;
+    }
+
+    private function makeSubtable(array $rows): DataTable
+    {
+        $subtable = new DataTable();
+        $subtable->addRowsFromSimpleArray($rows);
+
+        return $subtable;
     }
 }

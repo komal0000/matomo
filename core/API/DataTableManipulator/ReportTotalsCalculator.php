@@ -13,6 +13,7 @@ use Piwik\API\DataTableManipulator;
 use Piwik\API\DataTablePostProcessor;
 use Piwik\Common;
 use Piwik\DataTable;
+use Piwik\DataTable\Filter\Pattern;
 use Piwik\Metrics\Formatter;
 use Piwik\Period;
 use Piwik\Piwik;
@@ -147,7 +148,12 @@ class ReportTotalsCalculator extends DataTableManipulator
 
         try {
             $unformatted = null;
-            $totalRow = $this->makeTotalsRow($dataTable, $unformatted, $rowsWerePostProcessed = true);
+            $totalRow = $this->makeTotalsRow(
+                $dataTable,
+                $unformatted,
+                $rowsWerePostProcessed = true,
+                $this->getRowsMatchingRecursiveTableSearch($dataTable)
+            );
         } catch (\Exception $e) {
             // the report totals are kept when the filtered totals cannot be computed
             return;
@@ -171,11 +177,13 @@ class ReportTotalsCalculator extends DataTableManipulator
      * @param array|null $totalRowUnformatted Set to the total column values before they are formatted.
      * @param bool $rowsWerePostProcessed Whether the rows already went through the part of the post
      *                                    processing that computes and formats processed metrics.
+     * @param DataTable\Row[]|null $rows The rows to sum instead of the rows of the given table.
      */
     private function makeTotalsRow(
         DataTable $table,
         ?array &$totalRowUnformatted,
-        bool $rowsWerePostProcessed = false
+        bool $rowsWerePostProcessed = false,
+        ?array $rows = null
     ): ?DataTable\Row {
         // keeping queued filters would not only add various metadata but also break the totals calculator for some reports
         // eg when needed metadata is missing to get site information (multisites.getall) etc
@@ -197,7 +205,7 @@ class ReportTotalsCalculator extends DataTableManipulator
 
         /** @var DataTable\Row|null $totalRow */
         $totalRow = null;
-        foreach ($table->getRows() as $row) {
+        foreach ($rows ?? $table->getRows() as $row) {
             if (!isset($totalRow)) {
                 $columns = $row->getColumns();
                 $columns['label'] = DataTable::LABEL_TOTALS_ROW;
@@ -259,6 +267,46 @@ class ReportTotalsCalculator extends DataTableManipulator
         }
 
         return $totalRow;
+    }
+
+    /**
+     * Returns the rows matching a recursive table search, or null when there is none.
+     *
+     * The PatternRecursive filter keeps a row that does not match when rows of its subtable match,
+     * eg a folder of the page urls report, with the values of the whole folder. For such a row only
+     * the matching rows of its subtable are returned, the rows the flattened report would show.
+     * A matching row is returned as a whole, as its values already include its subtable rows.
+     *
+     * @return DataTable\Row[]|null
+     */
+    private function getRowsMatchingRecursiveTableSearch(DataTable $table): ?array
+    {
+        $pattern = Common::getRequestVar('filter_pattern_recursive', '', 'string', $this->request);
+        if ('' === $pattern) {
+            return null;
+        }
+
+        $column = Common::getRequestVar('filter_column_recursive', 'label', 'string', $this->request);
+
+        return $this->collectRowsMatchingPattern($table, $column, Pattern::getPatternQuoted($pattern));
+    }
+
+    /**
+     * @return DataTable\Row[]
+     */
+    private function collectRowsMatchingPattern(DataTable $table, string $column, string $patternQuoted): array
+    {
+        $rows = [];
+        foreach ($table->getRows() as $row) {
+            $subtable = $row->getSubtable();
+            if ($subtable && !Pattern::match($patternQuoted, (string) $row->getColumn($column))) {
+                $rows = array_merge($rows, $this->collectRowsMatchingPattern($subtable, $column, $patternQuoted));
+            } else {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
     }
 
     /**
