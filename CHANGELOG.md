@@ -4,6 +4,46 @@ This is the Developer Changelog for Matomo platform developers. All changes in o
 
 The Product Changelog at **[matomo.org/changelog](https://matomo.org/changelog)** lets you see more details about any Matomo release, such as the list of new guides and FAQs, security fixes, and links to all closed issues.
 
+## Matomo 6.1.0
+
+### New config.ini.php settings
+* `[log] log_format` (and `log_format_<writer>` per writer) lets the file, database, errorlog and syslog log writers write `json`, `loggly` or `logstash` instead of `text`.
+* `[General] archive_failure_retry_delays` and `[General] archive_failure_max_attempts` set how long `core:archive` waits before retrying a failed archive and after how many failed attempts it stops retrying. Jobs still running after `[General] archive_failure_recovery_timeout` now count as a failed attempt instead of being queued again right away.
+
+### New APIs
+* Controller actions can ask the user to confirm with their second factor, e.g. a two-factor authentication code, by calling `Piwik\Plugins\Login\SecondFactorVerifier::requireSecondFactorConfirmed()`. Each confirmation can be used once, for that action only.
+* Plugins that provide a second factor answer the new events `Login.userRequiresSecondFactorConfirmation` and `Login.verifySecondFactor`.
+* The *Administration → Development → Component Library* page, available in development mode, documents the generic components, starting with the selector (`.mtm-selector`), and what each Matomo version changes in them.
+* The `ExpandOnHover` Vue directive now takes the `expandedClass` option of `ExpandOnClick`, and both directives accept a list of classes for it.
+* The Monolog plugin's DI entry `log.formatter.classes` maps log format names to formatter classes and can be extended by plugins to add log formats.
+* `archive_invalidations.status` can now be `Piwik\Archive\ArchiveInvalidator::INVALIDATION_STATUS_ON_HOLD` (`2`): `core:archive` doesn't process such invalidations until the failed archive they wait for can be retried.
+
+### New commands
+* `core:archive-failures` lists the archives `core:archive` failed to process and resets them, so they are retried in the next run.
+
+### Deprecations
+* The `disabled` class on a `.mtm-selector` is deprecated and will be removed in Matomo 7; use the `mtm-selector--disabled` modifier instead.
+* `Piwik\DataAccess\Model::isSimilarArchiveInProgress()` is deprecated and will be removed in Matomo 7; use `Piwik\DataAccess\Model::isArchiveAlreadyInProgress()` instead.
+
+### HTTP API
+* The `parts` parameter of `Transitions.getTransitionsForAction` accepts the new value `followingActionsWithoutLoops`: the following actions without page reloads, as in the full report.
+* `prettyDate` of `API.getProcessedReport` now names the period the report's rows were archived for:
+  * For a relative date such as `today`, `yesterday`, `lastN` or `previousN` with the period `day`, `week`, `month` or `year` on a single site whose day differs from UTC's, it names the site's days instead of UTC's, and so do the date line and file name of the scheduled reports generated from it.
+  * A relative `range` is still resolved as before, not on the site's days, and is labelled on the days its rows are archived for.
+  * A module that selects its own set of sites, such as `MultiSites.getAll`, is labelled on the days its rows cover, which are UTC's days when it covers more than one site.
+  * A scheduled report that holds `MultiSites` reports next to site reports takes its date line and file name from the site reports.
+* A segment using `!=` with the value `0`, or a value its segment maps to `0` such as `visitorType!=new`, `deviceType!=desktop` or `visitEcommerceStatus!=none`, now also matches the visits where the segment's value is `NULL`, as `!=` already did for any other value.
+
+### Archiving
+* Different `core:archive` processes can now archive "All visits" and segments of the same site and an overlapping period at the same time. State that an archiver shares across a site's segments must therefore also be safe to use while the "All visits" archive is processed.
+
+### New PHP events
+* New event `Metrics.formatEvolutionValue` that lets plugins format their metric values in the row evolution popover.
+
+### Other changes
+* Action names stored in `log_action.name` are now truncated to 4096 characters if they exceed the column limit.
+* The JavaScript `AjaxHelper` now handles an API error answered with a 4xx status like one answered with status `200`, unless an error callback set via `setErrorCallback()` handles it.
+
 ## Matomo 6.0.0
 
 ### Breaking Changes
@@ -76,6 +116,7 @@ The Product Changelog at **[matomo.org/changelog](https://matomo.org/changelog)*
 * `Piwik\Plugins\AIProviders\AIRequestDecision::reportUsage()` lets an `AIProviders.checkFeatureAllowed` listener that allows an action still report the used, limit and remaining figures, which `getUsed()`, `getLimit()` and `getRemaining()` previously returned only after `deny()`. It is ignored once the decision is denied. With several listeners the report with the least remaining wins, and a report without a remaining figure (unlimited) never replaces one that has it.
 * The `Archiver.filterRecordBuilders` event now also receives the `ArchiveProcessor` of the archive being built, so a listener can restrict or replace RecordBuilders for a specific site, period or segment. The RecordBuilder instances are shared by every archive built in the same request, so a listener should replace or remove entries rather than modify an instance. Existing listeners that take only `$recordBuilders` are unaffected.
 * The new `Marketplace.pluginTrialRequested` event is posted after a user requests a trial of a plugin, with the plugin's name and display name, so an audit trail can record it. The requesting user is the current user.
+* Each requirement returned by `Piwik\Plugin\Dependency::getMissingDependencies()` and `Piwik\Plugin::getMissingDependencies()` now carries a boolean `actualVersionTooNew` key, `true` when no version newer than the installed one satisfies it, so a UI can say the plugin is not yet compatible instead of asking for an update.
 * The new `Marketplace.trialRequestEmailsUnsubscribed` event is posted with a user's login after they turn off plugin trial request emails from the link in one of those emails, so an audit trail can record it. The current user may be anonymous or someone other than that user, and a link that repeats the state the user is already in posts nothing.
 
 ### Deprecations

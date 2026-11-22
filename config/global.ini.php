@@ -125,8 +125,20 @@ log_level = WARN
 ; this allows you to log more information to one backend vs another.
 ; log_level_screen =
 ; log_level_file =
+; log_level_database =
 ; log_level_errorlog =
 ; log_level_syslog =
+
+; format of the log entries written by the file, database, errorlog and syslog writers.
+; possible values are: text, json, loggly, logstash
+; the screen writer always uses text.
+log_format = text
+
+; you can also set specific log formats for different writers, by appending the writer name to log_format_, like so:
+; log_format_file =
+; log_format_database =
+; log_format_errorlog =
+; log_format_syslog =
 
 ; if configured to log in a file, log entries will be made to this file
 logger_file_path = tmp/logs/matomo.log
@@ -391,6 +403,15 @@ time_before_range_archive_considered_outdated = -1
 ; Time in seconds after a started archiving job is considered as failed and will be retried
 ; Do not configure this value lower than the maximum time it can take for the longest running archiving job to finish
 archive_failure_recovery_timeout = 86400
+
+; core:archive skips an archive that failed, and the periods built from it, until this many seconds have passed.
+; One comma separated value per failed attempt, the last one is used for any further attempt. Each value is capped at
+; one year, an invalid list is ignored in favour of the default.
+archive_failure_retry_delays = "3600,21600,86400"
+
+; After this many failed attempts core:archive stops retrying an archive (minimum 1).
+; Use ./console core:archive-failures to list failed archives and retry them.
+archive_failure_max_attempts = 5
 
 ; This setting is overridden in the UI, under "General Settings".
 ; The default value is to allow browsers to trigger the Matomo archiving process.
@@ -704,6 +725,9 @@ show_update_notification_to_superusers_only = 0
 ; notifications to hide, by ID. Only some notifications can be hidden, e.g. the warning about the PHP security
 ; advisory of 2026-10-21, when your Linux distribution has backported the fix without changing the PHP version number:
 ;disabled_notifications[] = PhpSecurityAdvisory_2026_10_21
+;
+; or the database EOL warning, when the Linux distribution continues providing security updates:
+;disabled_notifications[] = DatabaseVersionCheck
 
 ; Set to 1 if you're using https on your Matomo server and Matomo can't detect it,
 ; e.g., a reverse proxy using https-to-http, or a web server that doesn't

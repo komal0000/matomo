@@ -19,6 +19,7 @@ use Piwik\Config;
 use Piwik\Container\StaticContainer;
 use Piwik\Date;
 use Piwik\Exception\RedirectException;
+use Piwik\Exception\ThingNotFoundException;
 use Piwik\Http\BadRequestException;
 use Piwik\IP;
 use Piwik\Log;
@@ -257,7 +258,8 @@ class Controller extends \Piwik\Plugin\ControllerAdmin
         Piwik::checkUserHasSomeViewAccess();
 
         if (!$this->passwordVerify->hasPasswordVerifyBeenRequested()) {
-            throw new Exception('Not available');
+            // eg after the confirmation was completed or expired, so there is nothing left to confirm
+            Url::redirectToUrl('index.php');
         }
 
         if (!Url::isValidHost()) {
@@ -290,6 +292,56 @@ class Controller extends \Piwik\Plugin\ControllerAdmin
     }
 
     /**
+     * Asks the user to confirm a sensitive action with their second factor, see {@link SecondFactorVerifier}.
+     */
+    public function confirmSecondFactor(): string
+    {
+        Piwik::checkUserIsNotAnonymous();
+        Piwik::checkUserHasSomeViewAccess();
+
+        $secondFactorVerifier = StaticContainer::get(SecondFactorVerifier::class);
+        $requestId = Request::fromRequest()->getStringParameter(SecondFactorVerifier::REQUEST_ID_PARAMETER, '');
+
+        if (!$secondFactorVerifier->hasConfirmationBeenRequested($requestId)) {
+            // completed or expired, nothing left to confirm
+            Url::redirectToUrl('index.php');
+        }
+
+        if (!Url::isValidHost()) {
+            throw new BadRequestException("Cannot confirm second factor with untrusted hostname!");
+        }
+
+        $nonceKey = 'confirmSecondFactor';
+        $messageNoAccess = '';
+        $request = Request::fromPost();
+
+        if ($request->getParameters() !== []) {
+            $nonce = $request->getStringParameter('nonce', '');
+            $code = trim($request->getStringParameter('code', ''));
+            $errorMessage = Nonce::verifyNonceWithErrorMessage($nonceKey, $nonce);
+            if ($errorMessage !== '') {
+                $messageNoAccess = $errorMessage;
+            } else {
+                $redirectUrl = $code === '' ? null : $secondFactorVerifier->confirmSecondFactor($requestId, $code);
+                if ($redirectUrl !== null) {
+                    Url::redirectToUrl($redirectUrl);
+                }
+
+                $messageNoAccess = Piwik::translate('Login_WrongSecondFactorCode');
+            }
+        }
+
+        return $this->renderTemplate('@Login/confirmSecondFactor', [
+            'nonce'             => Nonce::getNonce($nonceKey),
+            'requestId'         => $requestId,
+            'AccessErrorString' => $messageNoAccess,
+            // the page can be served by another plugin's action, see SecondFactorVerifier
+            'confirmModule'     => Piwik::getModule() ?: $this->pluginName,
+            'whatsNewChanges'   => $this->getWhatsNewChanges(),
+        ]);
+    }
+
+    /**
      * Form-less login
      * @see how to use it on https://matomo.org/faq/how-to/faq_30
      * @throws Exception
@@ -298,7 +350,7 @@ class Controller extends \Piwik\Plugin\ControllerAdmin
     public function logme()
     {
         if (Config\GeneralConfig::getConfigValue('login_allow_logme') == 0) {
-            throw new Exception('This functionality has been disabled in config');
+            throw new ThingNotFoundException('This functionality has been disabled in config');
         }
 
         $request  = Request::fromRequest();
@@ -397,6 +449,7 @@ class Controller extends \Piwik\Plugin\ControllerAdmin
         Nonce::discardNonce('Login.login');
 
         $this->auth->setLogin($login);
+        $this->auth->setTokenAuth(null); // ensure authentication happens on password
         if ($passwordHashed === false) {
             $this->auth->setPassword($password);
         } else {
